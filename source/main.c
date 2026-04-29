@@ -61,6 +61,11 @@ main(int argc, char **argv)
    float rStickX = 0.0f;
    float rStickY = 0.0f;
 
+   float size = 1.0f;
+
+   float tX = 1.0f;
+   float tY = 1.0f;
+
    WHBLogUdpInit();
    WHBProcInit();
    WHBGfxInit();
@@ -148,6 +153,11 @@ main(int argc, char **argv)
     float cy = cosf(yaw),   sy = sinf(yaw);
     float cr = cosf(roll),  sr = sinf(roll);
 
+    size = 1.0f + rStickY * -0.00001f;
+
+    tX = 1.0f + stickX * 0.000001f;
+    tY = 1.0f + stickY * -0.000001f;
+
     // base triangle verts
     float verts[3][3] = {
         { 1.0f, -1.0f, 0.0f },
@@ -157,20 +167,20 @@ main(int argc, char **argv)
 
     float *triangle = (float *)GX2RLockBufferEx(&positionBuffer, 0);
 
-    triangle[0] = ((1.0f * cy) - (-1.0f * sy)) * cr;
-    triangle[1] = ((1.0f * sy) + (-1.0f * cy)) * cp;
+    triangle[0] = tX + ((1.0f * cy) - (-1.0f * sy)) * cr;
+    triangle[1] = tY + ((1.0f * sy) + (-1.0f * cy)) * cp;
     triangle[2] = -1.0f * sp * sr;
-    triangle[3] = 2.0f;
+    triangle[3] = 1.0f / size;
 
-    triangle[4] = ((0.0f * cy) - (1.0f * sy));
-    triangle[5] = ((0.0f * sy) + (1.0f * cy)) * cp;
+    triangle[4] = tX + ((0.0f * cy) - (1.0f * sy));
+    triangle[5] = tY + ((0.0f * sy) + (1.0f * cy)) * cp;
     triangle[6] = -1.0f * sp;
-    triangle[7] = 2.0f;
+    triangle[7] = 1.0f / size;
 
-    triangle[8] = ((-1.0f * cy) - (-1.0f * sy)) * cr;
-    triangle[9] = ((-1.0f * sy) + (-1.0f * cy)) * cp;
+    triangle[8] = tX + ((-1.0f * cy) - (-1.0f * sy)) * cr;
+    triangle[9] = tY + ((-1.0f * sy) + (-1.0f * cy)) * cp;
     triangle[10] = 1.0f * sp * sr;
-    triangle[11] = 2.0f;
+    triangle[11] = 1.0f / size;
     GX2RUnlockBufferEx(&positionBuffer, 0);
 
     // Render!
