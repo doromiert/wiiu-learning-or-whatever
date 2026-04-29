@@ -155,7 +155,7 @@ main(int argc, char **argv)
        {0},
        {0},
        {
-          277, 577, 140, 340
+          277, 477, 140, 340
        },
        "#000000"
    };
@@ -176,6 +176,17 @@ main(int argc, char **argv)
    float touchX = 0.0f;
    float touchY = 0.0f;
    bool touchDown = false;
+
+   float curX;
+   float curY;
+   float targetX = 277.0f;
+   float targetY = 90.0f;
+
+   float velX;
+   float velY;
+
+   float stiffness = 0.1f;
+   float damping = 0.9f;
 
    WHBLogUdpInit();
    WHBProcInit();
@@ -283,20 +294,48 @@ main(int argc, char **argv)
     size = 1.0f + rStickY * -0.00001f;
 
     tX = -1.0f + touchX / 2000.0f;
-    tY = -1.0f + touchY / 2000.0f;
+    tY = -1.0f + touchY / -2000.0f;
 
-    float centerX = -1.0f + touchX / 2000.0f;
-    float centerY = -1.0f + touchY / 2000.0f;
-    float radius = 1.0f;
-    tX = centerX + radius * cosf(angle);
-    tY = centerY + radius * sinf(angle);
-    angle += 0.05f; // speed
+    // float centerX = -1.0f + touchX / 2000.0f;
+    // float centerY = -1.0f + touchY / 2000.0f;
+    // float radius = 1.0f;
+    // tX = centerX + radius * cosf(angle);
+    // tY = centerY + radius * sinf(angle);
+    // angle += 0.05f; // speed
 
     tX = tX * 427 + 427;
     tY = tY * 240 + 240;
 
+    float lerpSpeed = 0.1f;
+
+    if (touchDown) {
+        // calculate velocity based on stylus movement
+        // we use a high stiffness here so it follows the pen closely
+        float targetDragX = tX - 150;
+        float targetDragY = tY - 150 + 480;
+
+        velX += (targetDragX - curX) * stiffness;
+        velX *= damping;
+        curX += velX;
+
+        velY += (targetDragY - curY) * stiffness;
+        velY *= damping;
+        curY += velY;
+    } else {
+        float returnStiffness = 0.05f;
+
+        velX += (targetX - curX) * returnStiffness;
+        velX *= damping;
+        curX += velX;
+
+        velY += (targetY - curY) * returnStiffness;
+        velY *= damping;
+        curY += velY;
+    }
+
     testRect.coords = (Rect){
-        tX + 300, tX + 600, tY + 150, tY + 450
+        curX, curX + 300,
+        curY, curY + 300
     };
 
     // Render!
