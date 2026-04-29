@@ -260,6 +260,10 @@ main(int argc, char **argv)
    GX2RCreateBuffer(&testRect.cBuffer);
 
    WHBLogPrintf("Begin rendering...");
+
+   static float pitch = 0, yaw = 0, roll = 0;
+   static float accelOffsetX = 0.0f, accelOffsetY = 0.0f;
+
    while (WHBProcIsRunning()) {
 
     VPADStatus status;
@@ -279,10 +283,15 @@ main(int argc, char **argv)
     touchY = status.tpNormal.y;
     touchDown = status.tpNormal.touched;
 
-    //     1.0f, -1.0f,  0.0f, 1.0f, BR
-    //     0.0f,  1.0f,  0.0f, 1.0f, TC
-    //    -1.0f, -1.0f,  1.0f, 1.0f, BL
-    static float pitch = 0, yaw = 0, roll = 0;
+    // calibration using the + button
+    if (status.trigger & VPAD_BUTTON_PLUS) {
+        pitch = 0.0f;
+        yaw = 0.0f;
+        roll = 0.0f;
+        accelOffsetX = status.accelorometer.acc.x;
+        accelOffsetY = status.accelorometer.acc.y;
+    }
+
     pitch += status.gyro.x * 0.1f;
     yaw   += status.gyro.y * 0.1f;
     roll  += status.gyro.z * 0.1f;
@@ -295,13 +304,6 @@ main(int argc, char **argv)
 
     tX = -1.0f + touchX / 2000.0f;
     tY = -1.0f + touchY / -2000.0f;
-
-    // float centerX = -1.0f + touchX / 2000.0f;
-    // float centerY = -1.0f + touchY / 2000.0f;
-    // float radius = 1.0f;
-    // tX = centerX + radius * cosf(angle);
-    // tY = centerY + radius * sinf(angle);
-    // angle += 0.05f; // speed
 
     tX = tX * 427 + 427;
     tY = tY * 240 + 240;
@@ -324,13 +326,28 @@ main(int argc, char **argv)
     } else {
         float returnStiffness = 0.05f;
 
-        velX += (targetX - curX) * returnStiffness;
+        // get absolute accel tilt minus whatever zero point we calibrated
+        float currentAccelX = status.accelorometer.acc.x - accelOffsetX;
+        float currentAccelY = status.accelorometer.acc.y - accelOffsetY;
+
+        // combine gyro and accel for that chaotic tilt gravity
+        float gyroTargetX = targetX + (roll * 150.0f) + (currentAccelX * 500.0f);
+        float gyroTargetY = targetY - (pitch * 150.0f) - (currentAccelY * 500.0f);
+
+        velX += (gyroTargetX - curX) * returnStiffness;
         velX *= damping;
         curX += velX;
 
-        velY += (targetY - curY) * returnStiffness;
+        velY += (gyroTargetY - curY) * returnStiffness;
         velY *= damping;
         curY += velY;
+
+        // collision walls so you don't lose the square into the void
+        // it'll bounce slightly because of the velocity flip
+        if (curX < 0.0f) { curX = 0.0f; velX *= -0.5f; }
+        if (curX > 854.0f - 300.0f) { curX = 854.0f - 300.0f; velX *= -0.5f; }
+        if (curY < 0.0f) { curY = 0.0f; velY *= -0.5f; }
+        if (curY > 480.0f - 300.0f) { curY = 480.0f - 300.0f; velY *= -0.5f; }
     }
 
     testRect.coords = (Rect){
@@ -346,9 +363,6 @@ main(int argc, char **argv)
     GX2SetFetchShader(&group.fetchShader);
     GX2SetVertexShader(group.vertexShader);
     GX2SetPixelShader(group.pixelShader);
-    // GX2RSetAttributeBuffer(&positionBuffer, 0, positionBuffer.elemSize, 0);
-    // GX2RSetAttributeBuffer(&colourBuffer, 1, colourBuffer.elemSize, 0);
-    // GX2DrawEx(GX2_PRIMITIVE_MODE_TRIANGLES, 3, 0, 1);
     drawRect(testRect.coords, testRect.color, &testRect.rBuffer, &testRect.cBuffer, &group);
     WHBGfxFinishRenderTV();
 
@@ -357,9 +371,6 @@ main(int argc, char **argv)
     GX2SetFetchShader(&group.fetchShader);
     GX2SetVertexShader(group.vertexShader);
     GX2SetPixelShader(group.pixelShader);
-    // GX2RSetAttributeBuffer(&positionBuffer, 0, positionBuffer.elemSize, 0);
-    // GX2RSetAttributeBuffer(&colourBuffer, 1, colourBuffer.elemSize, 0);
-    // GX2DrawEx(GX2_PRIMITIVE_MODE_TRIANGLES, 3, 0, 1);
     drawRect(testRect.coords, testRect.color, &testRect.rBuffer, &testRect.cBuffer, &group);
     WHBGfxFinishRenderDRC();
 
