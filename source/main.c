@@ -5,7 +5,7 @@
 #include <gx2/shaders.h>
 #include <gx2r/buffer.h>
 #include <gx2r/draw.h>
-#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <whb/file.h>
 #include <whb/gfx.h>
@@ -19,6 +19,9 @@
 #include <coreinit/systeminfo.h>
 #include <coreinit/thread.h>
 #include <coreinit/time.h>
+
+#define MAX(value1, value2) (value1 > value2 ? value1 : value2)
+#define MIN(value1, value2) (value1 < value2 ? value1 : value2)
 
 static const float sPositionData[] = {
    // clang-format off
@@ -36,9 +39,104 @@ static const float sColourData[] = {
    // clang-format on
 };
 
+typedef struct {
+    float x0, x1, y0, y1;
+} Rect;
+
+typedef struct {
+    float r, g, b, a;
+} Color;
+
+typedef struct {
+    float x, y, z, w;
+} Vert;
+
+typedef struct {
+    Vert v0;
+    Vert v1;
+    Vert v2;
+} Triangle;
+
+typedef struct {
+    GX2RBuffer rBuffer, cBuffer;
+    Rect coords;
+    char color[8];
+} Rectangle;
+
 float clampf(float d, float min, float max) {
   const float t = d < min ? min : d;
   return t > max ? max : t;
+}
+
+Color toGx2Color(char* color){
+    bool isHash = (color[0] == '#');
+    long cNum = strtol(color + isHash, NULL, 16);
+
+    if((strlen(color) - isHash) == 6){
+        return (Color){
+            ((cNum >> 16) & 0xFF) / 255.0f,
+            ((cNum >> 8) & 0xFF) / 255.0f,
+            (cNum & 0xFF) / 255.0f,
+            255.0f / 255.0f
+        };
+    }else{
+        return (Color){
+            ((cNum >> 24) & 0xFF) / 255.0f,
+            ((cNum >> 16) & 0xFF) / 255.0f,
+            ((cNum >> 8) & 0xFF) / 255.0f,
+            (cNum & 0xFF) / 255.0f,
+        };
+    }
+}
+
+void drawRect(Rect rect, char* color, GX2RBuffer *rectBuffer, GX2RBuffer *colorBuffer, WHBGfxShaderGroup *group){
+    Color gx2Color = toGx2Color(color);
+
+    float nX0 = clampf((rect.x0 / 854.0f) * 2 - 1, -1.0f, 1.0f);
+    float nY0 = -1.0f * clampf((rect.y0 / 480.0f) * 2 - 1, -1.0f, 1.0f);
+    float nX1 = clampf((rect.x1 / 854.0f) * 2 - 1, -1.0f, 1.0f);
+    float nY1 = -1.0f * clampf((rect.y1 / 480.0f) * 2 - 1, -1.0f, 1.0f);
+
+    Triangle tri0 = {
+        (Vert){ nX0, nY0, 0.0f, 1.0f },
+        (Vert){ nX1, nY0, 0.0f, 1.0f },
+        (Vert){ nX0, nY1, 0.0f, 1.0f }
+    };
+
+    Triangle tri1 = {
+        (Vert){ nX1, nY1, 0.0f, 1.0f },
+        (Vert){ nX1, nY0, 0.0f, 1.0f },
+        (Vert){ nX0, nY1, 0.0f, 1.0f }
+    };
+
+    void *rBuf = GX2RLockBufferEx(rectBuffer, 0);
+    void *cBuf = GX2RLockBufferEx(colorBuffer, 0);
+
+    memcpy(rBuf, &tri0, sizeof(Triangle));
+    memcpy((char*)rBuf + sizeof(Triangle), &tri1, sizeof(Triangle));
+
+    float colorData[6 * 4] = {
+        gx2Color.r, gx2Color.g, gx2Color.b, gx2Color.a,
+        gx2Color.r, gx2Color.g, gx2Color.b, gx2Color.a,
+        gx2Color.r, gx2Color.g, gx2Color.b, gx2Color.a,
+        gx2Color.r, gx2Color.g, gx2Color.b, gx2Color.a,
+        gx2Color.r, gx2Color.g, gx2Color.b, gx2Color.a,
+        gx2Color.r, gx2Color.g, gx2Color.b, gx2Color.a,
+    };
+
+    memcpy(cBuf, &colorData, sizeof(colorData));
+
+    GX2RUnlockBufferEx(rectBuffer, 0);
+    GX2RUnlockBufferEx(colorBuffer, 0);
+
+    GX2SetFetchShader(&group->fetchShader);
+    GX2SetVertexShader(group->vertexShader);
+    GX2SetPixelShader(group->pixelShader);
+    GX2RSetAttributeBuffer(rectBuffer, 0, rectBuffer->elemSize, 0);
+    GX2RSetAttributeBuffer(colorBuffer, 1, colorBuffer->elemSize, 0);
+    GX2DrawEx(GX2_PRIMITIVE_MODE_TRIANGLES, 6, 0, 1);
+
+    return;
 }
 
 int
@@ -53,6 +151,15 @@ main(int argc, char **argv)
    int result = 0;
    float angle = 0.0f;
 
+   Rectangle testRect = {
+       {0},
+       {0},
+       {
+          277, 577, 140, 340
+       },
+       "#ffffff"
+   };
+
    float gyroX = 0.0f;
    float gyroY = 0.0f;
    float gyroZ = 0.0f;
@@ -65,6 +172,10 @@ main(int argc, char **argv)
 
    float tX = 1.0f;
    float tY = 1.0f;
+
+   float touchX = 0.0f;
+   float touchY = 0.0f;
+   bool touchDown = false;
 
    WHBLogUdpInit();
    WHBProcInit();
@@ -119,6 +230,24 @@ main(int argc, char **argv)
    memcpy(buffer, sColourData, colourBuffer.elemSize * colourBuffer.elemCount);
    GX2RUnlockBufferEx(&colourBuffer, 0);
 
+   // Set vertex position
+   testRect.rBuffer.flags = GX2R_RESOURCE_BIND_VERTEX_BUFFER |
+                            GX2R_RESOURCE_USAGE_CPU_READ |
+                            GX2R_RESOURCE_USAGE_CPU_WRITE |
+                            GX2R_RESOURCE_USAGE_GPU_READ;
+   testRect.rBuffer.elemSize  = 4 * 4;
+   testRect.rBuffer.elemCount = 6;
+   GX2RCreateBuffer(&testRect.rBuffer);
+
+   // Set vertex colour
+   testRect.cBuffer.flags = GX2R_RESOURCE_BIND_VERTEX_BUFFER |
+                        GX2R_RESOURCE_USAGE_CPU_READ |
+                        GX2R_RESOURCE_USAGE_CPU_WRITE |
+                        GX2R_RESOURCE_USAGE_GPU_READ;
+   testRect.cBuffer.elemSize  = 4 * 4;
+   testRect.cBuffer.elemCount = 6;
+   GX2RCreateBuffer(&testRect.cBuffer);
+
    WHBLogPrintf("Begin rendering...");
    while (WHBProcIsRunning()) {
 
@@ -135,11 +264,9 @@ main(int argc, char **argv)
     gyroX = 0x20000 * status.gyro.x;
     gyroY = 0x20000 * status.gyro.y;
 
-    static int frameCount = 0;
-    frameCount++;
-    if (frameCount % 30 == 0) {
-        WHBLogPrintf("gyro: %f %f %f", gyroX, gyroY, gyroZ);
-    }
+    touchX = status.tpNormal.x;
+    touchY = status.tpNormal.y;
+    touchDown = status.tpNormal.touched;
 
     //     1.0f, -1.0f,  0.0f, 1.0f, BR
     //     0.0f,  1.0f,  0.0f, 1.0f, TC
@@ -155,8 +282,33 @@ main(int argc, char **argv)
 
     size = 1.0f + rStickY * -0.00001f;
 
-    tX = 1.0f + stickX * 0.000001f;
-    tY = 1.0f + stickY * -0.000001f;
+    tX = -1.0f + touchX / 2000.0f;
+    tY = -1.0f + touchY / 2000.0f;
+
+    float vx[3], vy[3];
+    vx[0] = ((1.0f * cy) - (-1.0f * sy)) * cr;
+    vy[0] = ((1.0f * sy) + (-1.0f * cy)) * cp;
+
+    vx[1] = ((0.0f * cy) - (1.0f * sy));
+    vy[1] = ((0.0f * sy) + (1.0f * cy)) * cp;
+
+    vx[2] = ((-1.0f * cy) - (-1.0f * sy)) * cr ;
+    vy[2] = ((-1.0f * sy) + (-1.0f * cy)) * cp ;
+
+    float minX = MIN(vx[0], MIN(vx[1], vx[2]));
+    float minY = MIN(vy[0], MIN(vy[1], vy[2]));
+
+    float maxX = MAX(vx[0], MAX(vx[1], vx[2]));
+    float maxY = MAX(vy[0], MAX(vy[1], vy[2]));
+
+    // tX -= maxX - 1.0f;
+    // tY -= maxY - 1.0f;
+
+    // tX = clampf(tX, -1.0f - minX * size, 1.0f - maxX);
+    // tY = clampf(tY, -1.0f - minY * size, 1.0f - maxY);
+
+    // tX -= -1.0f + minX;
+    // tY -= -1.0f + minY;
 
     // base triangle verts
     float verts[3][3] = {
@@ -191,9 +343,10 @@ main(int argc, char **argv)
     GX2SetFetchShader(&group.fetchShader);
     GX2SetVertexShader(group.vertexShader);
     GX2SetPixelShader(group.pixelShader);
-    GX2RSetAttributeBuffer(&positionBuffer, 0, positionBuffer.elemSize, 0);
-    GX2RSetAttributeBuffer(&colourBuffer, 1, colourBuffer.elemSize, 0);
-    GX2DrawEx(GX2_PRIMITIVE_MODE_TRIANGLES, 3, 0, 1);
+    // GX2RSetAttributeBuffer(&positionBuffer, 0, positionBuffer.elemSize, 0);
+    // GX2RSetAttributeBuffer(&colourBuffer, 1, colourBuffer.elemSize, 0);
+    // GX2DrawEx(GX2_PRIMITIVE_MODE_TRIANGLES, 3, 0, 1);
+    drawRect(testRect.coords, testRect.color, &testRect.rBuffer, &testRect.cBuffer, &group);
     WHBGfxFinishRenderTV();
 
     WHBGfxBeginRenderDRC();
@@ -201,9 +354,10 @@ main(int argc, char **argv)
     GX2SetFetchShader(&group.fetchShader);
     GX2SetVertexShader(group.vertexShader);
     GX2SetPixelShader(group.pixelShader);
-    GX2RSetAttributeBuffer(&positionBuffer, 0, positionBuffer.elemSize, 0);
-    GX2RSetAttributeBuffer(&colourBuffer, 1, colourBuffer.elemSize, 0);
-    GX2DrawEx(GX2_PRIMITIVE_MODE_TRIANGLES, 3, 0, 1);
+    // GX2RSetAttributeBuffer(&positionBuffer, 0, positionBuffer.elemSize, 0);
+    // GX2RSetAttributeBuffer(&colourBuffer, 1, colourBuffer.elemSize, 0);
+    // GX2DrawEx(GX2_PRIMITIVE_MODE_TRIANGLES, 3, 0, 1);
+    drawRect(testRect.coords, testRect.color, &testRect.rBuffer, &testRect.cBuffer, &group);
     WHBGfxFinishRenderDRC();
 
     WHBGfxFinishRender();

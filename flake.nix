@@ -34,6 +34,13 @@
         };
       in
       {
+        devShells.default = pkgs.mkShell {
+          packages = [ pkgs.clang-tools pkgs.zed-editor pkgs.neovim pkgs.socat ];
+          shellHook = ''
+            export CPATH="${pkgs.devkitNix.devkitPPC.CPATH}"
+            zsh
+          '';
+        };
         packages = {
           # 1. .#dist target
           dist = wut-example;

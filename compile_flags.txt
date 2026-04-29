@@ -1,0 +1,8 @@
+-D__WIIU__
+-D__WUT__
+-I/nix/store/z4dw6ks7zwn3a273q5459sbbqaa46nz6-devkitPPC/opt/devkitpro/devkitPPC/include
+-I/nix/store/z4dw6ks7zwn3a273q5459sbbqaa46nz6-devkitPPC/opt/devkitpro/devkitPPC/powerpc-eabi/include
+-I/nix/store/z4dw6ks7zwn3a273q5459sbbqaa46nz6-devkitPPC/opt/devkitpro/wut/include
+-I/nix/store/z4dw6ks7zwn3a273q5459sbbqaa46nz6-devkitPPC/opt/devkitpro/portlibs/wiiu/include
+-Isource
+-Iinclude
