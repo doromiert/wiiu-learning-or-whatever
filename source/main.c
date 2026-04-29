@@ -157,7 +157,7 @@ main(int argc, char **argv)
        {
           277, 577, 140, 340
        },
-       "#ffffff"
+       "#000000"
    };
 
    float gyroX = 0.0f;
@@ -285,55 +285,19 @@ main(int argc, char **argv)
     tX = -1.0f + touchX / 2000.0f;
     tY = -1.0f + touchY / 2000.0f;
 
-    float vx[3], vy[3];
-    vx[0] = ((1.0f * cy) - (-1.0f * sy)) * cr;
-    vy[0] = ((1.0f * sy) + (-1.0f * cy)) * cp;
+    float centerX = -1.0f + touchX / 2000.0f;
+    float centerY = -1.0f + touchY / 2000.0f;
+    float radius = 1.0f;
+    tX = centerX + radius * cosf(angle);
+    tY = centerY + radius * sinf(angle);
+    angle += 0.05f; // speed
 
-    vx[1] = ((0.0f * cy) - (1.0f * sy));
-    vy[1] = ((0.0f * sy) + (1.0f * cy)) * cp;
+    tX = tX * 427 + 427;
+    tY = tY * 240 + 240;
 
-    vx[2] = ((-1.0f * cy) - (-1.0f * sy)) * cr ;
-    vy[2] = ((-1.0f * sy) + (-1.0f * cy)) * cp ;
-
-    float minX = MIN(vx[0], MIN(vx[1], vx[2]));
-    float minY = MIN(vy[0], MIN(vy[1], vy[2]));
-
-    float maxX = MAX(vx[0], MAX(vx[1], vx[2]));
-    float maxY = MAX(vy[0], MAX(vy[1], vy[2]));
-
-    // tX -= maxX - 1.0f;
-    // tY -= maxY - 1.0f;
-
-    // tX = clampf(tX, -1.0f - minX * size, 1.0f - maxX);
-    // tY = clampf(tY, -1.0f - minY * size, 1.0f - maxY);
-
-    // tX -= -1.0f + minX;
-    // tY -= -1.0f + minY;
-
-    // base triangle verts
-    float verts[3][3] = {
-        { 1.0f, -1.0f, 0.0f },
-        { 0.0f,  1.0f, 0.0f },
-        {-1.0f, -1.0f, 0.0f },
+    testRect.coords = (Rect){
+        tX + 300, tX + 600, tY + 150, tY + 450
     };
-
-    float *triangle = (float *)GX2RLockBufferEx(&positionBuffer, 0);
-
-    triangle[0] = tX + ((1.0f * cy) - (-1.0f * sy)) * cr;
-    triangle[1] = tY + ((1.0f * sy) + (-1.0f * cy)) * cp;
-    triangle[2] = -1.0f * sp * sr;
-    triangle[3] = 1.0f / size;
-
-    triangle[4] = tX + ((0.0f * cy) - (1.0f * sy));
-    triangle[5] = tY + ((0.0f * sy) + (1.0f * cy)) * cp;
-    triangle[6] = -1.0f * sp;
-    triangle[7] = 1.0f / size;
-
-    triangle[8] = tX + ((-1.0f * cy) - (-1.0f * sy)) * cr;
-    triangle[9] = tY + ((-1.0f * sy) + (-1.0f * cy)) * cp;
-    triangle[10] = 1.0f * sp * sr;
-    triangle[11] = 1.0f / size;
-    GX2RUnlockBufferEx(&positionBuffer, 0);
 
     // Render!
     WHBGfxBeginRender();
